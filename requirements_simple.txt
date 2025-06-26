@@ -7,7 +7,6 @@ pydantic==2.3.0
 # ML and Computer Vision
 torch>=2.2.0
 torchvision>=0.17.0
-timm>=0.9.5
 opencv-python>=4.8.0
 numpy>=1.25.0
 pillow>=10.0.0
@@ -17,10 +16,7 @@ trimesh>=3.23.0
 pyrender>=0.1.45
 pyglet>=2.0.9
 
-# Depth Estimation - Use transformers library with MiDaS models
-transformers>=4.35.0
-
 # Utilities
 tqdm>=4.66.0
 matplotlib>=3.7.0
-scipy>=1.11.0
+scipy>=1.11.0 
