@@ -87,7 +87,10 @@ class ImageProcessor:
             
             # Normalize depth map
             depth = self._normalize_depth(depth)
-            
+
+            # Enhance contrast using CLAHE-style stretch
+            depth = self._enhance_contrast(depth)
+
             logger.info("Depth map generated successfully")
             return depth
             
@@ -111,6 +114,15 @@ class ImageProcessor:
             logger.error(f"Error normalizing depth: {str(e)}")
             raise RuntimeError(f"Failed to normalize depth: {str(e)}")
     
+    def _enhance_contrast(self, depth: np.ndarray) -> np.ndarray:
+        """Stretch depth histogram so near/far objects have more separation."""
+        try:
+            p2, p98 = np.percentile(depth[depth > 0], (2, 98)) if depth.max() > 0 else (0, 1)
+            depth = np.clip((depth - p2) / (p98 - p2 + 1e-8), 0, 1)
+            return depth.astype(np.float32)
+        except Exception:
+            return depth
+
     def enhance_depth_map(self, depth: np.ndarray, method: str = "bilateral") -> np.ndarray:
         """
         Enhance depth map using various filtering techniques

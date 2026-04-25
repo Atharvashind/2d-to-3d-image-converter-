@@ -65,10 +65,12 @@ class API {
 
   async convertImage(
     file: File,
-    options: ConversionOptions = { model_type: 'mesh', quality: 'medium' }
+    options: ConversionOptions = { model_type: 'mesh', quality: 'medium' },
+    backFile?: File
   ): Promise<ConversionResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    if (backFile) formData.append('back_file', backFile);
     formData.append('model_type', options.model_type);
     formData.append('quality', options.quality);
 

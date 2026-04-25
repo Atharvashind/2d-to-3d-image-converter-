@@ -14,6 +14,10 @@ from utils.file_utils import save_upload_file, cleanup_temp_files
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Persistent output directory for generated models
+OUTPUT_DIR = Path(tempfile.gettempdir()) / "3d_models"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI(
     title="2D to 3D Image Converter API",
     description="Convert 2D images to 3D models using depth estimation",
@@ -80,51 +84,41 @@ async def health_check():
 @app.post("/convert")
 async def convert_image_to_3d(
     file: UploadFile = File(...),
-    model_type: str = "mesh",  # mesh, point_cloud, textured
-    quality: str = "medium"    # low, medium, high
+    back_file: UploadFile = File(None),
+    model_type: str = "mesh",
+    quality: str = "medium"
 ):
-    """
-    Convert a 2D image to a 3D model
-    
-    Args:
-        file: The uploaded image file
-        model_type: Type of 3D model to generate (mesh, point_cloud, textured)
-        quality: Quality of the generated model (low, medium, high)
-    
-    Returns:
-        JSON response with model file path and metadata
-    """
+    temp_dir = Path(tempfile.mkdtemp())
     try:
-        # Validate file type
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
-        
-        # Save uploaded file
-        temp_dir = Path(tempfile.mkdtemp())
+
         input_path = save_upload_file(file, temp_dir)
-        
-        logger.info(f"Processing image: {input_path}")
-        
-        # Process image and generate depth map
+        logger.info(f"Processing front image: {input_path}")
+
+        # Optional back image
+        back_path = None
+        if back_file and back_file.filename:
+            back_path = save_upload_file(back_file, temp_dir)
+            logger.info(f"Processing back image: {back_path}")
+
         depth_map = await image_processor.process_image(input_path)
-        
-        # Generate 3D model based on type
+
         if model_generator is None:
             raise HTTPException(status_code=500, detail="Model generator not available")
-            
+
         if model_type == "mesh":
-            model_path = await model_generator.generate_mesh(depth_map, input_path, quality, temp_dir)
+            model_path = await model_generator.generate_mesh(depth_map, input_path, quality, OUTPUT_DIR, back_path)
         elif model_type == "point_cloud":
-            model_path = await model_generator.generate_point_cloud(depth_map, quality, temp_dir)
+            model_path = await model_generator.generate_point_cloud(depth_map, quality, OUTPUT_DIR)
         elif model_type == "textured":
-            model_path = await model_generator.generate_textured_model(depth_map, input_path, quality, temp_dir)
+            model_path = await model_generator.generate_textured_model(depth_map, input_path, quality, OUTPUT_DIR, back_path)
         else:
             raise HTTPException(status_code=400, detail="Invalid model type")
-        
-        # Get file info
+
         file_size = os.path.getsize(model_path)
         file_name = os.path.basename(model_path)
-        
+
         return {
             "success": True,
             "model_path": str(model_path),
@@ -133,37 +127,29 @@ async def convert_image_to_3d(
             "model_type": model_type,
             "quality": quality
         }
-        
+
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
     finally:
-        # Cleanup temporary files
         cleanup_temp_files(temp_dir)
+
+@app.get("/debug/files")
+async def list_output_files():
+    files = [f.name for f in OUTPUT_DIR.iterdir()] if OUTPUT_DIR.exists() else []
+    return {"output_dir": str(OUTPUT_DIR), "files": files}
 
 @app.get("/download/{filename}")
 async def download_model(filename: str):
-    """
-    Download the generated 3D model file
-    """
-    try:
-        # This would typically look up the file in a database or storage system
-        # For now, we'll assume files are stored in a temp directory
-        temp_dir = Path(tempfile.gettempdir()) / "3d_models"
-        file_path = temp_dir / filename
-        
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-        
-        return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type='application/octet-stream'
-        )
-        
-    except Exception as e:
-        logger.error(f"Error downloading file: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")
+    file_path = OUTPUT_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type='application/octet-stream',
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 

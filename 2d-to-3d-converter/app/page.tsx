@@ -14,6 +14,7 @@ import { toast } from "sonner"
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null)
+  const [backImage, setBackImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [modelReady, setModelReady] = useState(false)
   const [processingStep, setProcessingStep] = useState<string>("")
@@ -29,6 +30,10 @@ export default function Home() {
     setConversionResult(null)
   }
 
+  const handleBackImageUpload = (imageDataUrl: string) => {
+    setBackImage(imageDataUrl)
+  }
+
   const convertTo3D = async () => {
     if (!image) return
 
@@ -39,6 +44,7 @@ export default function Home() {
     try {
       setProcessingStep("Converting image to file...")
       const file = await api.base64ToFile(image)
+      const backFile = backImage ? await api.base64ToFile(backImage, 'back.jpg') : undefined
       
       setProcessingStep("Analyzing image structure...")
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -50,7 +56,7 @@ export default function Home() {
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
       setProcessingStep("Creating 3D mesh...")
-      const result = await api.convertImage(file, conversionOptions)
+      const result = await api.convertImage(file, conversionOptions, backFile)
       
       setProcessingStep("Finalizing model...")
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -101,13 +107,21 @@ export default function Home() {
 
             {image && (
               <div className="mt-4 space-y-4">
-                <h3 className="text-lg font-medium mb-2">Preview</h3>
+                <h3 className="text-lg font-medium mb-2">Front Preview</h3>
                 <div className="relative rounded-md overflow-hidden border border-gray-200 aspect-square">
-                  <img
-                    src={image || "/placeholder.svg"}
-                    alt="Uploaded preview"
-                    className="w-full h-full object-contain"
-                  />
+                  <img src={image || "/placeholder.svg"} alt="Front" className="w-full h-full object-contain" />
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Back Image <span className="text-sm text-gray-400 font-normal">(optional)</span></h3>
+                  {backImage ? (
+                    <div className="relative rounded-md overflow-hidden border border-gray-200 aspect-square">
+                      <img src={backImage} alt="Back" className="w-full h-full object-contain" />
+                      <button onClick={() => setBackImage(null)} className="absolute top-1 right-1 bg-red-500 text-white text-xs px-2 py-1 rounded">Remove</button>
+                    </div>
+                  ) : (
+                    <ImageUploader onImageUpload={handleBackImageUpload} />
+                  )}
                 </div>
                 
                 <div className="space-y-3">
@@ -164,7 +178,11 @@ export default function Home() {
             ) : modelReady ? (
               <div className="flex-1 flex flex-col">
                 <div className="flex-1 min-h-[400px] mb-4">
-                  <ModelViewer imageUrl={image} />
+                  <ModelViewer
+                    modelPath={conversionResult ? `http://localhost:8000/download/${conversionResult.file_name}` : null}
+                    imageUrl={image}
+                    onDownload={conversionResult ? downloadModel : undefined}
+                  />
                 </div>
                 
                 {conversionResult && (
